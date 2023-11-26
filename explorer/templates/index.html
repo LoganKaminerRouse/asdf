@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>SAT Explorer</title>
+    <script src="https://unpkg.com/gojs/release/go.js"></script>
+    <style>
+        #flowchartContainer {
+            width: 100%;
+            height: 600px;
+            border: 1px solid black;
+        }
+        
+        #nodeDataDisplay {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Explorer (v0.0.1)</h1>
+    <input type="file" id="fileInput" accept=".har">
+    <div id="flowchartContainer"></div>
+    <div id="nodeDataDisplay">
+        <h2>Selected Node Data</h2>
+        <pre id="nodeData"></pre>
+    </div>
+
+    <script>
+        function init() {
+            var $ = go.GraphObject.make;
+            var myDiagram = $(go.Diagram, "flowchartContainer", {
+                "undoManager.isEnabled": true
+            });
+
+            myDiagram.nodeTemplate =
+                $(go.Node, "Auto",
+                    $(go.Shape, "RoundedRectangle",
+                        new go.Binding("fill", "color"), // Ensure this binding is set up
+                        {
+                            strokeWidth: 0
+                        }
+                    ),
+                    $(go.TextBlock, {
+                            margin: 8
+                        },
+                        new go.Binding("text", "key")
+                    )
+                );
+
+            myDiagram.linkTemplate =
+                $(go.Link,
+                    $(go.Shape),
+                    $(go.Shape, {
+                        toArrow: "OpenTriangle"
+                    })
+                );
+
+            function formatHeaders(headers) {
+                return headers.map(header => header.name + ": " + header.value).join("\n");
+            }
+
+            function formatCookies(cookies) {
+                return cookies.map(cookie => cookie.name + ": " + cookie.value).join("\n");
+            }
+
+            // Event listener for node selection
+            myDiagram.addDiagramListener("ChangedSelection", function(e) {
+                var node = e.diagram.selection.first();
+                if (node instanceof go.Node) {
+                    var data = node.data.details;
+                    console.log(node.data);
+                    console.log(data);
+                    var displayText = "";
+
+                    if (data.request) {
+                        displayText += "Method: " + data.request.method + "\n";
+                        displayText += "URL: " + data.request.url + "\n";
+                        displayText += "Headers:\n" + formatHeaders(data.request.headers) + "\n";
+                        displayText += "Cookies:\n" + formatCookies(data.request.cookies) + "\n";
+                    }
+                    if (data.response) {
+                        displayText += "Status Code: " + data.response.status + "\n";
+                    }
+
+                    document.getElementById('nodeData').textContent = displayText;
+                } else {
+                    document.getElementById('nodeData').textContent = "";
+                }
+            });
+        }
+
+        function getNodeColor(statusCode) {
+            return statusCode === 200 ? "lightblue" : (statusCode !== 404 ? "yellow" : "red");
+        }
+
+        function createFlowchartFromJson(jsonData) {
+            var myDiagram = go.Diagram.fromDiv("flowchartContainer");
+            var nodeDataArray = [];
+            var linkDataArray = [];
+
+            // Assuming jsonData is an object with keys and values
+            Object.keys(jsonData).forEach((key, index) => {
+                var nodeData = jsonData[key];
+                nodeDataArray.push({
+                    key: key,
+                    color: getNodeColor(nodeData.response.status),
+                    // label: ,
+                    details: jsonData[key]
+                });
+
+                if (index > 0) {
+                    linkDataArray.push({
+                        from: Object.keys(jsonData)[index - 1],
+                        to: key
+                    });
+                }
+            });
+
+            myDiagram.model = new go.GraphLinksModel(nodeDataArray, linkDataArray);
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(evt) {
+            var file = evt.target.files[0];
+            if (file) {
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var contents = e.target.result;
+                    var jsonData = JSON.parse(contents).log.entries;
+                    createFlowchartFromJson(jsonData);
+                };
+                reader.readAsText(file);
+            } else {
+                alert("Failed to load file");
+            }
+        }, false);
+
+        init();
+    </script>
+</body>
+
+</html>
